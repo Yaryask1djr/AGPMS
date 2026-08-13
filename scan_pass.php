@@ -57,7 +57,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'checkout') {
     // Check-out
     if ($log) {
         $conn->query("UPDATE visit_logs SET check_out_time = '$now' WHERE id = {$log['id']}");
-        $conn->query("UPDATE gate_passes SET status = 'checked_out' WHERE id = $pass_id");
+        if ($pass['pass_type'] !== 'recurring') {
+            $conn->query("UPDATE gate_passes SET status = 'checked_out' WHERE id = $pass_id");
+        }
         $alert = 'Visitor checked out successfully.';
     } else {
         $alert = 'Visitor is not checked in or already checked out.';
@@ -65,9 +67,21 @@ if (isset($_GET['action']) && $_GET['action'] === 'checkout') {
 } else {
     // Check-in
     if (!$log) {
-        $conn->query("INSERT INTO visit_logs (pass_id, check_in_time) VALUES ($pass_id, '$now')");
-        $conn->query("UPDATE gate_passes SET status = 'checked_in' WHERE id = $pass_id");
+        $sec_id = $_SESSION['user_id'];
+        $conn->query("INSERT INTO visit_logs (pass_id, check_in_time, security_id) VALUES ($pass_id, '$now', $sec_id)");
+        if ($pass['pass_type'] !== 'recurring') {
+            $conn->query("UPDATE gate_passes SET status = 'checked_in' WHERE id = $pass_id");
+        }
+
+        // Notify the resident that their visitor has arrived
+        $visitor_name = $pass['visitor_name'];
+        $resident_id = $pass['user_id'];
+        $notif_title = "Visitor Arrived";
+        $notif_message = htmlspecialchars($visitor_name) . " has been checked in at the gate.";
+        create_notification($conn, $resident_id, $notif_title, $notif_message);
+
         $alert = 'Visitor checked in successfully.';
+
     } else {
         $alert = 'Visitor already checked in.';
     }
