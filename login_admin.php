@@ -1,37 +1,51 @@
 <?php
-session_start();
-include 'includes/db.php';
-include 'includes/functions.php';
+require_once 'includes/auth.php';
+require_once 'includes/db.php';
+require_once 'includes/functions.php';
+
+// Redirect if already logged in as admin
+if (is_logged_in() && $_SESSION['role'] === 'admin') {
+    header("Location: admin_dashboard.php");
+    exit();
+}
 
 $error = "";
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-  $phone = sanitize($_POST['phone']);
-  $password = $_POST['password'];
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    require_csrf();
+    $phone = sanitize($_POST['phone']);
+    $password = $_POST['password'] ?? '';
 
-  $sql = "SELECT * FROM users WHERE phone = ? AND role = 'admin' LIMIT 1";
-  $stmt = $conn->prepare($sql);
-  $stmt->bind_param("s", $phone);
-  $stmt->execute();
-  $result = $stmt->get_result();
+    $sql = "SELECT * FROM users WHERE (phone = ? OR name = ?) AND role = 'admin' LIMIT 1";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("ss", $phone, $phone);
+    $stmt->execute();
+    $result = $stmt->get_result();
 
-  if ($result->num_rows === 1) {
-    $user = $result->fetch_assoc();
-    if (password_verify($password, $user['password'])) {
-      $_SESSION['user_id'] = $user['id'];
-      $_SESSION['role'] = 'admin';
-      header("Location: admin_dashboard.php");
-      exit();
+    if ($result->num_rows === 1) {
+        $user = $result->fetch_assoc();
+        if ($user['status'] !== 'active' || (int)$user['approved'] !== 1) {
+            $error = "This administrator account has been disabled.";
+        } elseif (password_verify($password, $user['password'])) {
+            session_regenerate_id(true);
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['auth_version'] = (int)$user['auth_version'];
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+            $_SESSION['role'] = 'admin';
+            $_SESSION['admin_name'] = $user['name'];
+            $_SESSION['admin_phone'] = $user['phone'];
+            log_admin_activity($conn, $user['id'], "Admin Login", "Administrator logged into control center.");
+            header("Location: admin_dashboard.php");
+            exit();
+        } else {
+            $error = "Invalid password. Please check your credentials.";
+        }
     } else {
-      $error = "Incorrect password.";
+        $error = "Admin account not found.";
     }
-  } else {
-    $error = "Admin account not found.";
-  }
-  $stmt->close();
+    $stmt->close();
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -61,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
     .auth-card {
         width: 100%;
-        max-width: 400px;
+        max-width: 420px;
         padding: 2.5rem;
     }
   </style>
@@ -83,25 +97,26 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 icon: 'error',
                 title: '<?php echo htmlspecialchars($error); ?>',
                 showConfirmButton: false,
-                timer: 3000
+                timer: 3500
             });
         });
       </script>
     <?php endif; ?>
 
     <form method="POST">
+      <?php echo csrf_field(); ?>
       <div class="mb-3">
-        <label for="phone" class="form-label text-light">Username</label>
+        <label for="phone" class="form-label text-light">Username or Phone</label>
         <div class="input-group">
             <span class="input-group-text bg-dark border-danger text-danger"><i class="bi bi-person-fill"></i></span>
-            <input type="text" name="phone" class="form-control bg-dark border-danger text-light" placeholder="Enter username" required>
+            <input type="text" name="phone" id="phone" class="form-control bg-dark border-danger text-light" placeholder="e.g. admin" required autocomplete="username">
         </div>
       </div>
       <div class="mb-4">
         <label for="password" class="form-label text-light">Password</label>
         <div class="input-group">
             <span class="input-group-text bg-dark border-danger text-danger"><i class="bi bi-lock-fill"></i></span>
-            <input type="password" name="password" class="form-control bg-dark border-danger text-light" placeholder="Enter password" required>
+            <input type="password" name="password" id="password" class="form-control bg-dark border-danger text-light" placeholder="Enter password" required autocomplete="current-password">
         </div>
       </div>
       <button type="submit" class="btn btn-danger w-100 rounded-pill fw-bold hover-lift shadow">Access Dashboard</button>

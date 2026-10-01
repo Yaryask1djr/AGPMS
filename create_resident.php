@@ -1,7 +1,8 @@
 <?php
-session_start();
-include 'includes/db.php';
-include 'includes/functions.php';
+require_once __DIR__ . "/includes/auth.php";
+require_role("admin");
+require_once 'includes/db.php';
+require_once 'includes/functions.php';
 
 // Only allow admin to create resident accounts
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
@@ -44,8 +45,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $alert = "Phone number already registered.";
             $alert_type = "error";
         } else {
-            // Insert new resident user (approved by default)
-            $insert = $conn->prepare("INSERT INTO users (name, house_no, phone, password, role, status, approved) VALUES (?, ?, ?, ?, 'resident', 'approved', 1)");
+            // Insert new resident user (approved and active by default)
+            $insert = $conn->prepare("INSERT INTO users (name, house_no, phone, password, role, status, approved) VALUES (?, ?, ?, ?, 'resident', 'active', 1)");
             $insert->bind_param("ssss", $name, $house_no, $phone, $password);
             if ($insert->execute()) {
                 // Optionally, add to residents table if you use it
@@ -113,6 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="col-md-6">
             <div class="card glass-card hover-lift p-4 shadow-lg border-0">
                 <form method="POST">
+<?php echo csrf_field(); ?>
                     <div class="mb-4 text-center">
                         <i class="bi bi-house-door text-primary" style="font-size: 3rem;"></i>
                         <h4 class="brand-font mt-2">Resident Profile</h4>

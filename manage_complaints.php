@@ -1,11 +1,12 @@
 <?php
-session_start();
+require_once __DIR__ . "/includes/auth.php";
+require_role("admin");
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] != 'admin') {
     header("Location: login_admin.php");
     exit();
 }
-include 'includes/db.php';
-include 'includes/functions.php';
+require_once 'includes/db.php';
+require_once 'includes/functions.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complaint_id'])) {
     $c_id = intval($_POST['complaint_id']);
@@ -79,6 +80,7 @@ $complaints = $conn->query("
                                 </td>
                                 <td>
                                     <form method="POST" class="d-flex gap-2">
+<?php echo csrf_field(); ?>
                                         <input type="hidden" name="complaint_id" value="<?php echo $c['id']; ?>">
                                         <select name="status" class="form-select form-select-sm">
                                             <option value="pending" <?php if($c['status']=='pending') echo 'selected'; ?>>Pending</option>

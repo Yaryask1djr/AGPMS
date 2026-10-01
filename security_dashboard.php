@@ -1,7 +1,8 @@
 <?php
-include 'includes/auth.php';
+require_once __DIR__ . "/includes/functions.php";
+require_once 'includes/auth.php';
 require_role('security');
-include 'includes/db.php';
+require_once 'includes/db.php';
 
 // Fetch security profile info
 $security_id = $_SESSION['user_id'];
@@ -53,7 +54,7 @@ $result = $conn->query($sql);
 $now = date('Y-m-d H:i:s');
 // Auto-update pass statuses
 $conn->query("UPDATE gate_passes SET status = 'active' WHERE status = 'pending' AND entry_time <= '$now'");
-$conn->query("UPDATE gate_passes SET status = 'expired' WHERE status != 'expired' AND exit_time < '$now'");
+$conn->query("UPDATE gate_passes SET status = 'expired' WHERE status IN ('pending','active') AND exit_time < '$now'");
 
 // Fetch Overstays (expired passes that haven't been checked out)
 $overstay_sql = "SELECT gp.*, u.name AS resident_name, u.house_no, gp.visitor_name, gp.contact, gp.pass_type, gp.vehicle_details, vl.check_in_time
@@ -77,35 +78,55 @@ $checked_out_result = $conn->query($checked_out_sql);
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<meta name="csrf-token" content="<?=htmlspecialchars(csrf_token(), ENT_QUOTES)?>">
+<meta name="scan-owner" content="<?=(int)$_SESSION['user_id']?>">
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Security Dashboard - GPMS</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
   <link rel="stylesheet" href="assets/css/style.css">
   <link rel="manifest" href="manifest.json">
   <script src="assets/js/dark-mode.js"></script>
+  <script src="assets/js/offline-scanner.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
-    /* Force dark mode styling specifically for the HUD */
-    body { background-color: #0b0c10; color: #c5c6c7; }
-    .card { background-color: #1f2833; border: 1px solid #45a29e; color: #c5c6c7; }
-    .table { color: #c5c6c7; }
-    .table-dark th { background-color: #0b0c10; color: #66fcf1; border-color: #45a29e; }
-    .table-bordered td, .table-bordered th { border-color: #1f2833; }
+    /* Security Command HUD styling */
+    .security-terminal .glass-card { border-left: 4px solid #0dcaf0; }
+    body.dark-mode { background-color: #0b0c10 !important; color: #c5c6c7 !important; }
+    body.dark-mode .card { background-color: #1a222d !important; border: 1px solid #45a29e !important; color: #c5c6c7 !important; }
+    body.dark-mode .table { color: #c5c6c7 !important; }
+    body.dark-mode .table-dark th { background-color: #0b0c10 !important; color: #66fcf1 !important; border-color: #45a29e !important; }
   </style>
 </head>
 <body>
   <div class="container mt-5">
-    <div class="d-flex justify-content-between align-items-center mb-4 glass-card p-3 hover-lift shadow-sm border-info">
-      <h2 class="mb-0 brand-font text-info"><i class="bi bi-shield-check"></i> Security Command HUD</h2>
-      <div class="d-flex gap-2">
-        <button id="darkModeToggle" class="btn btn-outline-secondary"><i class="bi bi-moon-fill"></i></button>
-        <a href="logout.php" class="btn btn-outline-danger">Logout</a>
-        <button id="panicRefresh" class="btn btn-warning" title="Refresh Panic Alerts"><i class="bi bi-arrow-clockwise"></i></button>
+    <div class="d-flex justify-content-between align-items-center mb-3 glass-card p-3 hover-lift shadow-sm border-info">
+      <div>
+        <h2 class="mb-0 brand-font text-info"><i class="bi bi-shield-check"></i> Security Command HUD</h2>
+        <div class="mt-1">
+          <span id="networkStatusIndicator" class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-wifi"></i> Online Terminal</span>
+          <span id="offlineQueueBadge" class="badge bg-warning text-dark rounded-pill px-3 py-2 ms-2" style="display:none;"></span>
+        </div>
+      </div>
+      <div class="d-flex gap-2 flex-wrap">
+        <a href="incident_report.php" class="btn btn-outline-danger rounded-pill btn-sm"><i class="bi bi-exclamation-triangle-fill me-1"></i> Report Incident</a>
+        <button id="darkModeToggle" class="btn btn-outline-secondary btn-sm rounded-pill"><i class="bi bi-moon-fill"></i></button>
+        <button id="panicRefresh" class="btn btn-warning btn-sm rounded-pill" title="Refresh Panic Alerts"><i class="bi bi-arrow-clockwise"></i></button>
+        <a href="logout.php" class="btn btn-outline-danger btn-sm rounded-pill"><i class="bi bi-box-arrow-right"></i> Logout</a>
       </div>
     </div>
     <div id="panicAlerts" class="mb-4"></div>
+
+<!-- Mobile Bottom Navigation -->
+<nav class="mobile-bottom-nav">
+  <a href="security_dashboard.php" class="nav-item active"><i class="bi bi-shield-fill"></i>HUD</a>
+  <a href="scan_pass.php" class="nav-item"><i class="bi bi-qr-code-scan"></i>Scan</a>
+  <a href="incident_report.php" class="nav-item danger"><i class="bi bi-exclamation-triangle-fill"></i>Incident</a>
+  <a href="shift_logs.php" class="nav-item"><i class="bi bi-clock-history"></i>Shifts</a>
+  <a href="logout.php" class="nav-item"><i class="bi bi-box-arrow-right"></i>Logout</a>
+</nav>
 
     <!-- Security Profile Info -->
     <div class="d-flex justify-content-center">
@@ -117,6 +138,7 @@ $checked_out_result = $conn->query($checked_out_sql);
           <p class="mb-3 text-info"><i class="bi bi-telephone-fill"></i> <?php echo htmlspecialchars($sec_phone); ?></p>
           
           <form method="POST" class="text-center">
+<?php echo csrf_field(); ?>
             <?php if ($is_clocked_in): ?>
               <button type="submit" name="shift_action" value="clock_out" class="btn btn-outline-danger w-100 fw-bold py-3 shadow hover-lift rounded-pill">CLOCK OUT OF SHIFT</button>
             <?php else: ?>
@@ -193,13 +215,15 @@ $checked_out_result = $conn->query($checked_out_sql);
           <div id="qr-reader" style="width:100%"></div>
           <script>
             function onScanSuccess(decodedText, decodedResult) {
-              window.location.href = "scan_pass.php?token=" + encodeURIComponent(decodedText);
+              if (window.scanBusy) return; window.scanBusy = true;
+              window.OfflineScanner.submit(decodedText).catch(error => { window.scanBusy = false; alert(error.message); });
             }
             let html5QrcodeScanner = new Html5QrcodeScanner(
               "qr-reader", { fps: 10, qrbox: 250 });
             html5QrcodeScanner.render(onScanSuccess);
           </script>
-          <form class="mt-4" method="GET" action="scan_pass.php">
+          <form class="mt-4" method="POST" action="scan_pass.php" onsubmit="event.preventDefault(); window.OfflineScanner.submit(this.token.value).catch(error => alert(error.message));">
+            <?php echo csrf_field(); ?>
             <div class="input-group input-group-lg">
               <input type="text" name="token" placeholder="Scan or Enter Token..." class="form-control bg-dark text-info border-info" required>
               <button class="btn btn-info fw-bold">Scan</button>
@@ -234,7 +258,7 @@ $checked_out_result = $conn->query($checked_out_sql);
               <td><?php echo htmlspecialchars($row['check_in_time']); ?></td>
               <td><span class="badge bg-success">Checked In</span></td>
               <td>
-                <a href="scan_pass.php?action=checkout&id=<?php echo $row['id']; ?>" class="btn btn-danger btn-sm">Check-Out</a>
+                <form method="POST" action="scan_pass.php" class="d-inline"><?php echo csrf_field(); ?><input type="hidden" name="id" value="<?php echo $row['id']; ?>"><input type="hidden" name="action" value="checkout"><button class="btn btn-sm btn-outline-primary" type="submit">Check-Out</button></form>
               </td>
             </tr>
             <?php endwhile; ?>
@@ -301,7 +325,7 @@ $checked_out_result = $conn->query($checked_out_sql);
         container.querySelectorAll('.resolve-btn').forEach(btn => {
           btn.addEventListener('click', e => {
             const id = e.target.getAttribute('data-id');
-            fetch('resolve_panic.php?id=' + id)
+            fetch('resolve_panic.php', {method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRF-Token':document.querySelector('meta[name=csrf-token]').content},body:new URLSearchParams({id})})
               .then(() => loadPanicAlerts())
               .catch(() => console.error('Failed to resolve panic alert'));
           });
@@ -309,20 +333,45 @@ $checked_out_result = $conn->query($checked_out_sql);
       })
       .catch(()=>{console.error('Failed to load panic alerts');});
   }
-  // Initial load and interval
+  // Auto-refresh panic alerts every 30 seconds (no page reload)
   loadPanicAlerts();
   setInterval(loadPanicAlerts, 30000);
-  // Manual refresh button
   document.getElementById('panicRefresh').addEventListener('click', loadPanicAlerts);
-
-  // Auto-refresh page for other updates (optional). Comment out if not needed.
-  setTimeout(() => { location.reload(); }, 30000);
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('sw.js');
     });
   }
+
+  // ── Offline Scanner HUD wiring ─────────────────────────
+  function updateNetworkBadge() {
+    const indicator = document.getElementById('networkStatusIndicator');
+    const queueBadge = document.getElementById('offlineQueueBadge');
+    if (!indicator) return;
+    if (navigator.onLine) {
+      indicator.className = 'badge bg-success rounded-pill px-3 py-2';
+      indicator.innerHTML = '<i class="bi bi-wifi"></i> Online Terminal';
+    } else {
+      indicator.className = 'badge bg-danger rounded-pill px-3 py-2';
+      indicator.innerHTML = '<i class="bi bi-wifi-off"></i> OFFLINE MODE';
+    }
+    // Show queued scan count from OfflineScanner if available
+    if (window.OfflineScanner) {
+      window.OfflineScanner.getQueueCount().then(count => {
+        if (count > 0) {
+          queueBadge.style.display = '';
+          queueBadge.innerHTML = '<i class="bi bi-clock-history"></i> ' + count + ' scan' + (count !== 1 ? 's' : '') + ' queued';
+        } else {
+          queueBadge.style.display = 'none';
+        }
+      });
+    }
+  }
+  window.addEventListener('online', updateNetworkBadge);
+  window.addEventListener('offline', updateNetworkBadge);
+  setInterval(updateNetworkBadge, 5000);
+  updateNetworkBadge();
 </script>
 </body>
 </html>

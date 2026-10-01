@@ -1,5 +1,5 @@
-<?php include 'includes/db.php'; ?>
-<?php include 'includes/functions.php'; ?>
+<?php require_once 'includes/auth.php'; ?>
+<?php require_once 'includes/functions.php'; ?>
 
 <!DOCTYPE html>
 <html lang="en">
@@ -17,6 +17,7 @@
 
       <?php
       if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+        require_csrf();
         $name = sanitize($_POST['name']);
         $house_no = sanitize($_POST['house_no']);
         $phone = sanitize($_POST['phone']);
@@ -72,6 +73,7 @@
       ?>
 
       <form method="POST">
+        <?php echo csrf_field(); ?>
         <div class="mb-3">
           <label for="name" class="form-label">Full Name</label>
           <input type="text" name="name" class="form-control" placeholder="Enter your full name" required>

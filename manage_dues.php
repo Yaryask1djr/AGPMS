@@ -1,7 +1,8 @@
 <?php
-session_start();
-include 'includes/db.php';
-include 'includes/functions.php';
+require_once __DIR__ . "/includes/auth.php";
+require_role("admin");
+require_once 'includes/db.php';
+require_once 'includes/functions.php';
 
 // Only allow admin
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
@@ -144,7 +145,8 @@ $total_cleared = $total_residents - $total_defaulters;
                             <?php endif; ?>
                         </td>
                         <td class="text-end">
-                            <form method="POST" class="d-inline" onsubmit="return confirmToggle(this, '<?php echo htmlspecialchars($r['name']); ?>', '<?php echo ($r['dues_status'] === 'defaulter') ? 'cleared' : 'defaulter'; ?>');">
+                            <form method="POST" class="d-inline" onsubmit="return confirmToggle(this, '<?php echo htmlspecialchars($r['name']); ?>
+<?php echo csrf_field(); ?>', '<?php echo ($r['dues_status'] === 'defaulter') ? 'cleared' : 'defaulter'; ?>');">
                                 <input type="hidden" name="toggle_user_id" value="<?php echo $r['id']; ?>">
                                 <input type="hidden" name="new_status" value="<?php echo ($r['dues_status'] === 'defaulter') ? 'cleared' : 'defaulter'; ?>">
                                 <?php if ($r['dues_status'] === 'defaulter'): ?>

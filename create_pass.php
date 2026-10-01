@@ -1,8 +1,8 @@
 <?php
-include 'includes/auth.php';
+require_once 'includes/auth.php';
 require_role('resident');
-include 'includes/db.php';
-include 'includes/functions.php';
+require_once 'includes/db.php';
+require_once 'includes/functions.php';
 
 // Check if resident is a defaulter
 $dues_stmt = $conn->prepare("SELECT dues_status FROM users WHERE id = ?");
@@ -88,6 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
   <?php endif; ?>
   <form method="POST" class="p-4 border bg-light">
+<?php echo csrf_field(); ?>
     <div class="mb-3">
       <label class="form-label">Visitor Name</label>
       <input type="text" name="visitor_name" class="form-control" required>

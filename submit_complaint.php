@@ -1,11 +1,12 @@
 <?php
-session_start();
+require_once __DIR__ . "/includes/auth.php";
+require_role("resident");
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] != 'resident') {
     header("Location: login_resident.php");
     exit();
 }
-include 'includes/db.php';
-include 'includes/functions.php';
+require_once 'includes/db.php';
+require_once 'includes/functions.php';
 
 $user_id = $_SESSION['user_id'];
 
@@ -47,6 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="card shadow-sm border-0">
             <div class="card-body">
                 <form method="POST">
+<?php echo csrf_field(); ?>
                     <div class="mb-3">
                         <label class="form-label">Subject</label>
                         <input type="text" name="subject" class="form-control" required placeholder="e.g. Broken Streetlight">
