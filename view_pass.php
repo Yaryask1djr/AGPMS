@@ -1,100 +1,172 @@
 <?php
-include 'includes/auth.php';
-require_role('resident');
-include 'includes/db.php';
+require_once 'includes/auth.php';
+require_once 'includes/db.php';
+require_once 'includes/functions.php';
+
+if (!is_logged_in()) {
+    header("Location: index.php");
+    exit();
+}
 
 if (!isset($_GET['id']) || empty($_GET['id'])) {
-    echo "Invalid or unauthorized access to pass.";
-    exit;
+    die("Invalid pass ID specified.");
 }
+
 $pass_id = intval($_GET['id']);
 $user_id = $_SESSION['user_id'];
+$user_role = $_SESSION['role'] ?? '';
 
-$stmt = $conn->prepare("SELECT * FROM gate_passes WHERE id = ?");
+// Fetch pass with user ownership check unless admin/security
+$stmt = $conn->prepare("SELECT gp.*, u.name as resident_name, u.house_no FROM gate_passes gp JOIN users u ON gp.user_id = u.id WHERE gp.id = ?");
 $stmt->bind_param("i", $pass_id);
 $stmt->execute();
 $result = $stmt->get_result();
-if ($result->num_rows === 0) {
-    echo "Invalid or unauthorized access to pass.";
-    exit;
-}
-$pass = $result->fetch_assoc();
 
+if ($result->num_rows === 0) {
+    die("Gate pass not found.");
+}
+
+$pass = $result->fetch_assoc();
+$stmt->close();
+
+// Enforce ownership: residents can only view their own passes
+if ($user_role === 'resident' && $pass['user_id'] != $user_id) {
+    die("Unauthorized access to this pass.");
+}
+
+// Generate QR code if needed
 $qr_data = $pass['token'];
-include 'phpqrcode/qrlib.php';
+if (!is_dir('temp_qr')) {
+    mkdir('temp_qr', 0777, true);
+}
+include_once 'phpqrcode/qrlib.php';
 $qr_path = "temp_qr/qr_{$pass['id']}.png";
 QRcode::png($qr_data, $qr_path, QR_ECLEVEL_L, 4);
-
-// Insert into visit_logs if not already present
-$check_log = $conn->prepare("SELECT id FROM visit_logs WHERE pass_id = ?");
-$check_log->bind_param("i", $pass['id']);
-$check_log->execute();
-$check_log->store_result();
-
-if ($check_log->num_rows === 0) {
-    $now = date('Y-m-d H:i:s');
-    $insert_log = $conn->prepare("INSERT INTO visit_logs (pass_id, check_in_time) VALUES (?, ?)");
-    $insert_log->bind_param("is", $pass['id'], $now);
-    $insert_log->execute();
-    $insert_log->close();
-}
-$check_log->close();
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>View Pass - AGPMS</title>
+  <title>View Pass #<?php echo htmlspecialchars($pass['id']); ?> - AGPMS</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
   <link rel="stylesheet" href="assets/css/style.css">
-</head>
-<body>
-  <div class="container mt-5">
-    <h2>Gate Pass Details</h2>
-    <table class="table">
-      <tr><th>Visitor</th><td><?php echo $pass['visitor_name']; ?></td></tr>
-      <tr><th>Contact</th><td><?php echo $pass['contact']; ?></td></tr>
-      <tr><th>Purpose</th><td><?php echo $pass['purpose']; ?></td></tr>
-      <tr><th>Vehicle</th><td><?php echo $pass['vehicle_details']; ?></td></tr>
-      <tr><th>Entry</th><td><?php echo $pass['entry_time']; ?></td></tr>
-      <tr><th>Exit</th><td><?php echo $pass['exit_time']; ?></td></tr>
-      <tr><th>Status</th><td><?php echo $pass['status']; ?></td></tr>
-      <tr>
-        <th>QR Code</th>
-        <td>
-          <img src="<?php echo $qr_path; ?>" alt="QR Code"><br>
-          <a href="<?php echo $qr_path; ?>" download="gate_pass_qr_<?php echo $pass['id']; ?>.png" class="btn btn-primary btn-sm mt-2">Download QR Code</a>
-          <div class="mt-2">
-            <strong>Manual Token:</strong>
-            <span class="badge bg-secondary"><?php echo htmlspecialchars($pass['token']); ?></span>
-          </div>
-        </td>
-      </tr>
-    </table>
-    <div class="mb-3 d-flex gap-2">
-      <?php
-        $wa_msg = urlencode("Hello! Here is your Gate Pass for IKHE.\nName: {$pass['visitor_name']}\nToken: {$pass['token']}\nEntry: {$pass['entry_time']}\nPlease show this token or QR code at the main gate.");
-      ?>
-      <a href="https://wa.me/?text=<?php echo $wa_msg; ?>" target="_blank" class="btn btn-success">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-whatsapp me-2" viewBox="0 0 16 16">
-          <path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.9 7.9 0 0 0 13.6 2.326zM7.994 14.521a6.6 6.6 0 0 1-3.356-.92l-.24-.144-2.49.652.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232"/>
-        </svg>Share via WhatsApp
-      </a>
-      <button class="btn btn-outline-primary" onclick="sendPassPrompt(<?php echo $pass['id']; ?>)">Send via Email</button>
-      <button class="btn btn-dark" onclick="window.print()">Download as PDF</button>
-    </div>
-    <a href="resident_dashboard.php" class="btn btn-secondary mt-2">Back to Dashboard</a>
-  </div>
-
-  <script>
-    function sendPassPrompt(passId) {
-      const recipient = prompt("Enter recipient email to send the pass:");
-      if (recipient) {
-        window.location.href = `send_pass.php?id=${passId}&recipient=${encodeURIComponent(recipient)}`;
-      }
+  <style>
+    @media print {
+      .no-print { display: none !important; }
+      body { background: white !important; }
+      .pass-card { box-shadow: none !important; border: 1px solid #000 !important; }
     }
-  </script>
+  </style>
+</head>
+<body class="bg-light py-4">
+  <div class="container" style="max-width: 650px;">
+    
+    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+      <h3 class="brand-font mb-0"><i class="bi bi-qr-code text-primary"></i> Gate Pass #<?php echo htmlspecialchars($pass['id']); ?></h3>
+      <?php if ($user_role === 'resident'): ?>
+        <a href="resident_dashboard.php" class="btn btn-outline-secondary rounded-pill btn-sm px-3"><i class="bi bi-arrow-left"></i> Dashboard</a>
+      <?php else: ?>
+        <a href="admin_dashboard.php" class="btn btn-outline-secondary rounded-pill btn-sm px-3"><i class="bi bi-arrow-left"></i> Dashboard</a>
+      <?php endif; ?>
+    </div>
+
+    <?php if (isset($_GET['sent'])): ?>
+      <div class="alert alert-success alert-dismissible fade show no-print rounded-pill px-4" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i> <?php echo $_GET["sent"] === "accepted" ? "Mail accepted for delivery; delivery is not confirmed." : "Mail submission failed. Please try again later."; ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    <?php endif; ?>
+
+    <div class="card shadow-sm border-0 pass-card rounded-4 overflow-hidden mb-4">
+      <div class="bg-primary text-white p-3 text-center">
+        <h4 class="mb-0 fw-bold">Ibrahim Kunya Housing Estate</h4>
+        <small class="opacity-75">Visitor Access Authorization Pass</small>
+      </div>
+      <div class="card-body p-4">
+        <div class="text-center mb-4">
+          <img src="<?php echo htmlspecialchars($qr_path); ?>" alt="QR Code" class="img-thumbnail shadow-sm mb-2" style="width: 180px; height: 180px;">
+          <div class="mt-2">
+            <span class="text-muted small d-block">Access Token:</span>
+            <span class="badge bg-dark fs-6 px-3 py-2 font-monospace tracking-wide"><?php echo htmlspecialchars($pass['token']); ?></span>
+          </div>
+        </div>
+
+        <table class="table table-bordered mb-0">
+          <tbody>
+            <tr>
+              <th class="bg-light text-muted" style="width: 35%;">Visitor Name</th>
+              <td class="fw-bold"><?php echo htmlspecialchars($pass['visitor_name']); ?></td>
+            </tr>
+            <tr>
+              <th class="bg-light text-muted">Contact Phone</th>
+              <td><?php echo htmlspecialchars($pass['contact']); ?></td>
+            </tr>
+            <tr>
+              <th class="bg-light text-muted">Host Resident</th>
+              <td><?php echo htmlspecialchars($pass['resident_name']); ?> (House <?php echo htmlspecialchars($pass['house_no']); ?>)</td>
+            </tr>
+            <tr>
+              <th class="bg-light text-muted">Pass Type</th>
+              <td><span class="badge bg-info text-dark"><?php echo htmlspecialchars(ucfirst(str_replace('_', ' ', $pass['pass_type']))); ?></span></td>
+            </tr>
+            <tr>
+              <th class="bg-light text-muted">Purpose</th>
+              <td><?php echo htmlspecialchars($pass['purpose']); ?></td>
+            </tr>
+            <tr>
+              <th class="bg-light text-muted">Vehicle Details</th>
+              <td><?php echo htmlspecialchars($pass['vehicle_details'] ?: 'None (Pedestrian)'); ?></td>
+            </tr>
+            <tr>
+              <th class="bg-light text-muted">Valid From</th>
+              <td><?php echo date('M d, Y h:i A', strtotime($pass['entry_time'])); ?></td>
+            </tr>
+            <tr>
+              <th class="bg-light text-muted">Valid Until</th>
+              <td><?php echo ($pass['pass_type'] === 'recurring') ? 'Permanent / Recurring' : date('M d, Y h:i A', strtotime($pass['exit_time'])); ?></td>
+            </tr>
+            <tr>
+              <th class="bg-light text-muted">Status</th>
+              <td>
+                <?php
+                  $badge = 'secondary';
+                  if ($pass['status'] === 'active') $badge = 'success';
+                  elseif ($pass['status'] === 'checked_in') $badge = 'primary';
+                  elseif ($pass['status'] === 'pending') $badge = 'warning text-dark';
+                  elseif ($pass['status'] === 'expired') $badge = 'danger';
+                ?>
+                <span class="badge bg-<?php echo $badge; ?>"><?php echo htmlspecialchars(ucfirst(str_replace('_', ' ', $pass['status']))); ?></span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <?php if ($user_role === 'resident'): ?>
+    <form method="POST" action="send_pass.php" class="no-print">
+      <?=csrf_field()?><input type="hidden" name="id" value="<?=(int)$pass_id?>">
+      <label for="pass-recipient">Email recipient</label><input type="email" id="pass-recipient" name="recipient" required maxlength="254"><button type="submit">Send pass</button>
+    </form>
+    <?php endif; ?>
+    <!-- Action Bar -->
+    <div class="d-flex flex-wrap gap-2 justify-content-center no-print mb-4">
+      <a href="<?php echo htmlspecialchars($qr_path); ?>" download="gate_pass_qr_<?php echo $pass['id']; ?>.png" class="btn btn-outline-primary rounded-pill px-3">
+        <i class="bi bi-download me-1"></i> Download QR
+      </a>
+      <?php
+        $wa_msg = urlencode("Hello! Here is your Gate Pass for Ibrahim Kunya Housing Estate:\nVisitor: {$pass['visitor_name']}\nHost: {$pass['resident_name']} (House {$pass['house_no']})\nToken: {$pass['token']}\nValid From: " . date('M d, Y h:i A', strtotime($pass['entry_time'])) . "\nPlease show this token or QR code to security at the gate.");
+      ?>
+      <a href="https://wa.me/?text=<?php echo $wa_msg; ?>" target="_blank" class="btn btn-success rounded-pill px-3">
+        <i class="bi bi-whatsapp me-1"></i> Share via WhatsApp
+      </a>
+      <button class="btn btn-dark rounded-pill px-3" onclick="window.print()">
+        <i class="bi bi-printer me-1"></i> Print Pass
+      </button>
+    </div>
+
+  </div>
 </body>
 </html>

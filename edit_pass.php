@@ -1,9 +1,9 @@
 <?php
 // filepath: c:\xampp\htdocs\NewAGPMS\edit_pass.php
-include 'includes/auth.php';
+require_once 'includes/auth.php';
 require_role('resident');
-include 'includes/db.php';
-include 'includes/functions.php';
+require_once 'includes/db.php';
+require_once 'includes/functions.php';
 
 $user_id = $_SESSION['user_id'];
 $pass_id = intval($_GET['id'] ?? 0);
@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8">`n  <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Edit Gate Pass</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="assets/css/style.css">
@@ -58,6 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="alert alert-danger"><?php echo $error; ?></div>
     <?php endif; ?>
     <form method="POST">
+<?php echo csrf_field(); ?>
         <div class="mb-3">
             <label class="form-label">Visitor Name</label>
             <input type="text" name="visitor_name" class="form-control" value="<?php echo htmlspecialchars($pass['visitor_name']); ?>" required>

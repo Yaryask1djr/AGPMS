@@ -1,8 +1,8 @@
 <?php
-include 'includes/auth.php';
+require_once 'includes/auth.php';
 require_role('admin');
-include 'includes/db.php';
-include 'includes/functions.php';
+require_once 'includes/db.php';
+require_once 'includes/functions.php';
 
 $admin_id = $_SESSION['user_id'];
 $alert = '';
@@ -32,7 +32,7 @@ $blacklist_items = $conn->query("SELECT * FROM blacklist ORDER BY created_at DES
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8">`n  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Manage Blacklist - GPMS</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="assets/css/style.css">
@@ -46,6 +46,7 @@ $blacklist_items = $conn->query("SELECT * FROM blacklist ORDER BY created_at DES
       <div class="card p-3 shadow-sm">
         <h5>Add to Blacklist</h5>
         <form method="POST">
+<?php echo csrf_field(); ?>
           <input type="hidden" name="action" value="add">
           <div class="mb-3">
             <label class="form-label">Name</label>
@@ -86,6 +87,7 @@ $blacklist_items = $conn->query("SELECT * FROM blacklist ORDER BY created_at DES
               <td><?= $row['created_at'] ?></td>
               <td>
                 <form method="POST" class="d-inline">
+<?php echo csrf_field(); ?>
                   <input type="hidden" name="action" value="remove">
                   <input type="hidden" name="id" value="<?= $row['id'] ?>">
                   <button class="btn btn-sm btn-outline-success">Unblock</button>

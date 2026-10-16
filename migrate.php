@@ -1,5 +1,6 @@
 <?php
-include 'includes/db.php';
+if (PHP_SAPI !== "cli") { http_response_code(404); exit; }
+require_once 'includes/db.php';
 
 $q1 = "CREATE TABLE IF NOT EXISTS blacklist (
     id INT AUTO_INCREMENT PRIMARY KEY,

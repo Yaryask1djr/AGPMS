@@ -1,8 +1,9 @@
 <?php
 // filepath: c:\xampp\htdocs\NewAGPMS\create_security.php
-session_start();
-include 'includes/db.php';
-include 'includes/functions.php';
+require_once __DIR__ . "/includes/auth.php";
+require_role("admin");
+require_once 'includes/db.php';
+require_once 'includes/functions.php';
 
 // Only allow admin to create security accounts
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
@@ -29,8 +30,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $alert = "Phone number already registered.";
         $alert_type = "error";
     } else {
-        // Insert new security user
-        $insert = $conn->prepare("INSERT INTO users (name, phone, password, role, status, approved) VALUES (?, ?, ?, 'security', 'approved', 1)");
+        // Insert new security user (approved and active)
+        $insert = $conn->prepare("INSERT INTO users (name, phone, password, role, status, approved) VALUES (?, ?, ?, 'security', 'active', 1)");
         $insert->bind_param("sss", $name, $phone, $password);
         if ($insert->execute()) {
             $_SESSION['new_user_name'] = $name;
@@ -86,6 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="col-md-6">
             <div class="card glass-card hover-lift p-4 shadow-lg border-0">
                 <form method="POST">
+<?php echo csrf_field(); ?>
                     <div class="mb-4 text-center">
                         <i class="bi bi-shield-lock text-danger" style="font-size: 3rem;"></i>
                         <h4 class="brand-font mt-2">New Guard Profile</h4>

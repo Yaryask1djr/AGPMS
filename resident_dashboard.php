@@ -1,7 +1,8 @@
 <?php
-include 'includes/auth.php';
+require_once 'includes/auth.php';
 require_role('resident');
-include 'includes/db.php';
+require_once 'includes/db.php';
+require_once 'includes/functions.php';
 
 $user_id = $_SESSION['user_id'];
 
@@ -59,6 +60,7 @@ $complaints = $conn->query("SELECT * FROM complaints WHERE user_id = $user_id OR
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<meta name="csrf-token" content="<?=htmlspecialchars(csrf_token(),ENT_QUOTES)?>">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Resident Dashboard - GPMS</title>
@@ -95,13 +97,22 @@ $complaints = $conn->query("SELECT * FROM complaints WHERE user_id = $user_id OR
     </div>
 </div>
 
+<!-- Mobile Bottom Navigation -->
+<nav class="mobile-bottom-nav">
+  <a href="resident_dashboard.php" class="nav-item active"><i class="bi bi-house-fill"></i>Home</a>
+  <a href="create_pass.php" class="nav-item"><i class="bi bi-plus-circle-fill"></i>New Pass</a>
+  <a href="submit_complaint.php" class="nav-item"><i class="bi bi-chat-dots-fill"></i>Complaint</a>
+  <a href="resident_settings.php" class="nav-item"><i class="bi bi-person-gear"></i>Profile</a>
+  <button id="panicBtnMobile" class="nav-item danger" onclick="document.getElementById('panicBtn').click()"><i class="bi bi-exclamation-triangle-fill"></i>SOS</button>
+</nav>
+
     <!-- Resident Profile Info (Digital ID Card) -->
     <div class="d-flex justify-content-center">
       <div class="card mb-4 digital-id-card hover-lift p-4" style="max-width: 400px; width: 100%;">
         <div class="d-flex align-items-center">
           <div class="me-3">
             <?php if (!empty($profile_pic)): ?>
-                <img src="uploads/<?php echo htmlspecialchars($profile_pic); ?>" alt="Profile" class="rounded-circle border border-2 border-white shadow" style="width: 80px; height: 80px; object-fit: cover;">
+                <img src="uploads/<?php echo htmlspecialchars(basename($profile_pic)); ?>" alt="Profile" class="rounded-circle border border-2 border-white shadow" style="width: 80px; height: 80px; object-fit: cover;">
             <?php else: ?>
                 <div class="bg-white text-primary rounded-circle d-flex justify-content-center align-items-center shadow" style="width: 80px; height: 80px; font-size: 2.5rem;">
                     <i class="bi bi-person-fill"></i>
@@ -175,7 +186,7 @@ $complaints = $conn->query("SELECT * FROM complaints WHERE user_id = $user_id OR
             <a href="view_pass.php?id=<?php echo $row['id']; ?>" class="btn btn-sm btn-info">View</a>
             <?php if ($row['status'] == 'pending' || ($row['status'] == 'active' && $row['pass_type'] == 'recurring')): ?>
               <a href="edit_pass.php?id=<?php echo $row['id']; ?>" class="btn btn-sm btn-warning">Edit</a>
-              <a href="cancel_pass.php?id=<?php echo $row['id']; ?>" class="btn btn-sm btn-danger">Cancel</a>
+              <form method="POST" action="cancel_pass.php" class="d-inline"><?php echo csrf_field(); ?><input type="hidden" name="id" value="<?php echo $row['id']; ?>"><button class="btn btn-sm btn-outline-primary" type="submit">Cancel</button></form>
             <?php endif; ?>
           </td>
         </tr>
@@ -225,7 +236,7 @@ $complaints = $conn->query("SELECT * FROM complaints WHERE user_id = $user_id OR
 document.getElementById('panicBtn').addEventListener('click', function(){
     fetch('panic_alert.php', {
         method: 'POST',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'}
+        headers: {'X-CSRF-Token': document.querySelector('meta[name=csrf-token]').content, 'Content-Type': 'application/x-www-form-urlencoded'}
     })
     .then(r => r.json())
     .then(data => {
@@ -300,7 +311,7 @@ function loadNotifications() {
 function markRead(id, el) {
   fetch('mark_notification_read.php', {
     method: 'POST',
-    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    headers: {'X-CSRF-Token': document.querySelector('meta[name=csrf-token]').content, 'Content-Type': 'application/x-www-form-urlencoded'},
     body: 'id=' + id
   }).then(() => {
     el.remove();
@@ -323,7 +334,7 @@ document.getElementById('markAllRead').addEventListener('click', function() {
   // Batch mark via individual calls (simple approach)
   fetch('mark_notification_read.php', {
     method: 'POST',
-    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    headers: {'X-CSRF-Token': document.querySelector('meta[name=csrf-token]').content, 'Content-Type': 'application/x-www-form-urlencoded'},
     body: 'all=1'
   }).then(() => {
     notifList.innerHTML = '<li class="list-group-item text-center text-muted">No new notifications</li>';

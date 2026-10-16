@@ -1,8 +1,9 @@
 <?php
-session_start();
-include 'includes/db.php';
-include 'includes/functions.php';
-include 'includes/auth.php';
+require_once __DIR__ . "/includes/auth.php";
+require_role("resident");
+require_once 'includes/db.php';
+require_once 'includes/functions.php';
+require_once 'includes/auth.php';
 require_role('resident');
 
 header('Content-Type: application/json');
